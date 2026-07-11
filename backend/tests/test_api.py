@@ -62,3 +62,33 @@ class TestAnalyzeEndpoint:
         # with garbage data. Exact status code isn't the point here -- the
         # point is the server doesn't crash the whole process.
         assert response.status_code in (400, 422, 500)
+
+
+class TestExplanationFlag:
+    def test_include_explanation_false_by_default(self):
+        rtl_text, tlm_text, _ = generate_pair(n_transactions=15, seed=2, inject=MismatchType.STATE_MISMATCH)
+        response = client.post(
+            "/analyze",
+            json={"rtl_log": rtl_text, "tlm_log": tlm_text},
+        )
+        assert response.status_code == 200
+        assert response.json()["explanation"] is None
+
+    def test_include_explanation_true_returns_text(self):
+        rtl_text, tlm_text, injected = generate_pair(
+            n_transactions=15, seed=2, inject=MismatchType.STATE_MISMATCH
+        )
+        response = client.post(
+            "/analyze",
+            json={
+                "rtl_log": rtl_text,
+                "tlm_log": tlm_text,
+                "include_explanation": True,
+            },
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["explanation"] is not None
+        assert len(body["explanation"]) > 0
+        # The explanation should reference the actual transaction involved
+        assert injected.txn_id in body["explanation"]

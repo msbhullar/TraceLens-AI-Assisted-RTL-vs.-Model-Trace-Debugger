@@ -16,6 +16,7 @@ class AnalyzeRequest(BaseModel):
     rtl_log: str
     tlm_log: str
     timing_threshold_ns: int = 100
+    include_explanation: bool = False
 
 
 class FindingResponse(BaseModel):
@@ -31,3 +32,4 @@ class AnalyzeResponse(BaseModel):
     total_findings: int
     first_divergence: Optional[FindingResponse] = None
     timeline: List[FindingResponse]
+    explanation: Optional[str] = None

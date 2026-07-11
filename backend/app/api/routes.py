@@ -1,8 +1,8 @@
 """
 FastAPI routes for TraceLens.
 
-Wires together the full pipeline (parse -> align -> detect -> localize)
-behind a single POST /analyze endpoint.
+Wires together the full pipeline (parse -> align -> detect -> localize ->
+optional LLM explanation) behind a single POST /analyze endpoint.
 """
 
 from fastapi import APIRouter, HTTPException
@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException
 from app.alignment.aligner import align_events
 from app.api.schemas import AnalyzeRequest, AnalyzeResponse, FindingResponse
 from app.detection.detector import detect_mismatches
+from app.llm.explainer import explain
 from app.localization.localizer import localize
 from app.models import TraceSource
 from app.parser.log_parser import LogParseError, parse_log_text
@@ -22,6 +23,7 @@ def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
     """
     Run the full TraceLens pipeline on a pair of RTL/TLM logs and return
     every detected mismatch, localized to the first point of divergence.
+    Optionally includes an LLM-generated plain-English debug summary.
     """
     try:
         rtl_events = parse_log_text(request.rtl_log, TraceSource.RTL)
@@ -53,8 +55,18 @@ def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
     if localization_result.first_divergence is not None:
         first_divergence_response = _to_response(localization_result.first_divergence.finding)
 
+    explanation = None
+    if request.include_explanation:
+        try:
+            explanation = explain(localization_result.first_divergence, localization_result.timeline)
+        except RuntimeError as e:
+            # Missing API key or similar config issue -- don't fail the whole
+            # request, just omit the explanation and surface why.
+            explanation = f"[Explanation unavailable: {e}]"
+
     return AnalyzeResponse(
         total_findings=len(findings),
         first_divergence=first_divergence_response,
         timeline=timeline_response,
+        explanation=explanation,
     )
