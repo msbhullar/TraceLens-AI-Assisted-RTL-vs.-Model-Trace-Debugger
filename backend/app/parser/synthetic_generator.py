@@ -108,11 +108,24 @@ def _inject_mismatch(
 ) -> Tuple[List[RawEvent], InjectedMismatch]:
     """Mutate a copy of the TLM events to introduce exactly one mismatch."""
     non_annotation_idx = [i for i, e in enumerate(tlm_events) if e.event_type != "ANNOTATION"]
+
+    # STATE_MISMATCH only makes sense on PKT_TX/PKT_RX events -- those are the
+    # only event types that carry a "state" field per the log format spec.
+    if mismatch == MismatchType.STATE_MISMATCH:
+        candidate_idx = [
+            i for i in non_annotation_idx if tlm_events[i].event_type in ("PKT_TX", "PKT_RX")
+        ]
+    else:
+        candidate_idx = non_annotation_idx
+
     # Pick a target somewhere in the middle third, so there's clean context
     # before and after the injected divergence (useful for localization testing).
-    lo = len(non_annotation_idx) // 3
-    hi = 2 * len(non_annotation_idx) // 3
-    target_pos = rng.choice(non_annotation_idx[lo:hi])
+    lo = len(candidate_idx) // 3
+    hi = 2 * len(candidate_idx) // 3
+    # Guard against a too-small candidate slice collapsing lo==hi
+    if lo >= hi:
+        lo, hi = 0, len(candidate_idx)
+    target_pos = rng.choice(candidate_idx[lo:hi])
     target = tlm_events[target_pos]
 
     if mismatch == MismatchType.DATA_MISMATCH:
